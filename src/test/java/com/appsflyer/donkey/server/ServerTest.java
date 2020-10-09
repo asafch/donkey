@@ -16,11 +16,14 @@
 
 package com.appsflyer.donkey.server;
 
+import clojure.lang.IPersistentMap;
+import com.appsflyer.donkey.ClojureObjectMapper;
 import com.appsflyer.donkey.Routes;
 import com.appsflyer.donkey.server.route.RouteDefinition;
 import com.appsflyer.donkey.server.route.RouteList;
 import com.appsflyer.donkey.server.ring.route.RingRouteCreatorFactory;
 import com.appsflyer.donkey.server.exception.ServerInitializationException;
+import io.netty.handler.codec.http.HttpVersion;
 import io.vertx.core.Vertx;
 import io.vertx.core.http.HttpServerOptions;
 import io.vertx.junit5.VertxExtension;
@@ -35,6 +38,8 @@ import java.util.concurrent.TimeUnit;
 
 import static com.appsflyer.donkey.TestUtil.assert200;
 import static com.appsflyer.donkey.TestUtil.doGet;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.core.StringStartsWith.startsWith;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 @Tag("integration")
@@ -102,7 +107,36 @@ class ServerTest {
   }
   
   @Test
-  void testRingCompliantRequest() {
-  
+  void testRingCompliantRequest(Vertx vertx, VertxTestContext testContext) throws
+                                                                           ServerInitializationException {
+    RouteDefinition route = Routes.echo();
+    server = Server.create(newServerConfig(vertx, RouteList.from(route)));
+    server.startSync();
+    
+    doGet(vertx, route.path().value() + "?foo=bar")
+        .onComplete(testContext.succeeding(
+            response -> testContext.verify(() -> {
+              assert200(response);
+              var request =
+                  (IPersistentMap) ClojureObjectMapper
+                      .mapper()
+                      .readValue(response.bodyAsString(), Object.class);
+              
+              assertEquals(port, request.valAt("server-port"));
+              assertEquals("localhost", request.valAt("server-name"));
+              assertThat((String) request.valAt("remote-addr"), startsWith("127.0.0.1:"));
+              assertEquals(route.path().value(), request.valAt("uri"));
+              assertEquals("foo=bar", request.valAt("query-string"));
+              assertEquals("http", request.valAt("scheme"));
+              assertEquals(HttpVersion.HTTP_1_1.text(), request.valAt("protocol"));
+              var headers = (IPersistentMap) request.valAt("headers");
+              assertEquals(2, headers.count());
+              assertEquals("localhost", headers.valAt("host"));
+              assertThat((String) headers.valAt("user-agent"), startsWith("Vert.x"));
+              
+              testContext.completeNow();
+            })));
+    
+    
   }
 }

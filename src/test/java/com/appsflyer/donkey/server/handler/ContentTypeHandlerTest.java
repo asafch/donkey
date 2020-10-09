@@ -94,14 +94,14 @@ class ContentTypeHandlerTest {
                    "uri", "/octet-stream",
                    "body", "Hello World"));
   
-    var routeDescriptors =
+    var routeDefinitions =
         routes.stream()
               .map(entry -> routeForContentType(entry.get("uri"), entry.get(CONTENT_TYPE))
                   .handler(ctx -> ctx.response().end(entry.get("body"))))
               .toArray(RouteDefinition[]::new);
     
     ServerConfig config = getDefaultConfigBuilder(
-        vertx, newRouterDefinitionWithContentType(routeDescriptors))
+        vertx, newRouterDefinitionWithContentType(routeDefinitions))
         .addContentTypeHeader(true)
         .build();
     
